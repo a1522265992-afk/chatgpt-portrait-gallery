@@ -14,6 +14,7 @@ export function AdminPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState(contentCategories[0]);
+  const [prompt, setPrompt] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewById, setPreviewById] = useState<Record<string, string>>({});
@@ -34,6 +35,7 @@ export function AdminPage() {
     setEditingId(null);
     setName('');
     setCategory(contentCategories[0]);
+    setPrompt('');
     setSelectedFile(null);
     setPreviewUrl(null);
   };
@@ -49,7 +51,8 @@ export function AdminPage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanName = name.trim();
-    if (!cleanName || (!editingId && !selectedFile)) return;
+    const cleanPrompt = prompt.trim();
+    if (!cleanName || !cleanPrompt || (!editingId && !selectedFile)) return;
 
     if (editingId) {
       const current = records.find((item) => item.id === editingId);
@@ -59,6 +62,7 @@ export function AdminPage() {
         ...item,
         name: cleanName,
         category,
+        prompt: cleanPrompt,
         tags: item.tags.length ? item.tags : [category],
         images: selectedFile ? [imagePath] : item.images,
       } : item));
@@ -83,7 +87,7 @@ export function AdminPage() {
         hot: false,
         images: [imagePath],
         description: `以${cleanName}为主题的写真效果。`,
-        prompt: `以参考人物为主体，生成${cleanName}风格写真，保持人物面部特征自然一致。`,
+        prompt: cleanPrompt,
       };
       setRecords((items) => [...items, newItem]);
       if (previewUrl) setPreviewById((items) => ({ ...items, [id]: previewUrl }));
@@ -100,6 +104,7 @@ export function AdminPage() {
     setEditingId(item.id);
     setName(item.name);
     setCategory(item.category);
+    setPrompt(item.prompt);
     setSelectedFile(null);
     setPreviewUrl(previewById[item.id] || item.images[0]);
     setImageInstruction(null);
@@ -155,6 +160,10 @@ export function AdminPage() {
             <select value={category} onChange={(event) => setCategory(event.target.value)}>
               {contentCategories.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
+          </label>
+          <label className="admin-field admin-prompt-field">
+            <span>提示词</span>
+            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="输入完整 AI 图片生成提示词" rows={6} required />
           </label>
           <button type="submit" className="admin-publish">发布</button>
         </form>

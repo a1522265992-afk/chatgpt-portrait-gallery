@@ -136,8 +136,10 @@ a { color: inherit; text-decoration: none; }
 .admin-form { display: grid; gap: 16px; }
 .admin-field { display: grid; gap: 8px; }
 .admin-field > span { font-size: .8rem; font-weight: 700; }
-.admin-field > input, .admin-field > select { width: 100%; height: 48px; padding: 0 13px; border: 1px solid var(--line); border-radius: 11px; background: #faf9f6; color: var(--ink); font: inherit; outline: none; }
-.admin-field > input:focus, .admin-field > select:focus { border-color: var(--ink); }
+.admin-field > input, .admin-field > select, .admin-field > textarea { width: 100%; padding: 0 13px; border: 1px solid var(--line); border-radius: 11px; background: #faf9f6; color: var(--ink); font: inherit; outline: none; }
+.admin-field > input, .admin-field > select { height: 48px; }
+.admin-field > textarea { min-height: 150px; padding-block: 12px; resize: vertical; line-height: 1.65; }
+.admin-field > input:focus, .admin-field > select:focus, .admin-field > textarea:focus { border-color: var(--ink); }
 .admin-upload { position: relative; min-height: 148px; overflow: hidden; border: 1px dashed #bdb9af; border-radius: 13px; background: #faf9f6; }
 .admin-upload input { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .admin-upload > div { min-height: 148px; display: grid; place-items: center; align-content: center; gap: 7px; color: #77736b; }
@@ -170,6 +172,7 @@ a { color: inherit; text-decoration: none; }
   .admin-panel { padding: 24px; }
   .admin-form { grid-template-columns: 1.3fr 1fr 1fr; align-items: end; }
   .admin-field:first-child { grid-row: span 2; }
+  .admin-prompt-field { grid-column: 2 / -1; }
   .admin-publish { grid-column: 2 / -1; }
   .admin-row { grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; }
   .admin-row-actions { grid-column: auto; }
