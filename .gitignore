@@ -9,3 +9,5 @@ coverage/
 !.env.production
 gui-test-screenshots/
 .sites-runtime/
+
+.vercel
