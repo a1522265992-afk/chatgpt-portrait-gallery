@@ -129,7 +129,7 @@ function DetailPage() {
             <div className="sheet-handle" /><button type="button" className="sheet-close" onClick={() => setSheetOpen(false)} aria-label="关闭"><X size={20} /></button>
             <p className="sheet-kicker">WECHAT · CONTACT</p><h2 id="lead-title">喜欢这个效果？</h2><p className="sheet-copy">加微信发原图和模板编号即可。</p>
             <div className="selected-template"><img src={item.images[0]} alt="当前模板缩略图" /><div><span>当前模板</span><strong>{item.number} {item.name}</strong></div></div>
-            <div className="qr-wrap"><img src="/wechat-qr.png" alt="微信二维码" /><span>二维码占位图 · 请替换为你的微信码</span></div>
+            <div className="qr-wrap"><img src="/wechat-qr.png" alt="微信二维码" /><span>长按识别二维码添加微信</span></div>
             <button type="button" className="copy-number-button" onClick={() => copy(`${item.number} ${item.name}`, 'number')}>{numberCopied ? <Check size={17} /> : <Copy size={17} />}{numberCopied ? '模板编号已复制' : '复制模板编号'}</button>
           </section>
         </div>
