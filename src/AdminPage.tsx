@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { ImagePlus, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { CheckSquare2, FolderMinus, FolderPlus, ImagePlus, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import type { CategoryRecord, PortraitCategoryRecord, PortraitRecord } from './gallery';
 import { isSupabaseConfigured, portraitBucket, supabase } from './supabase';
@@ -41,6 +41,12 @@ export function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [batchMode, setBatchMode] = useState(false);
+  const [adminCategoryFilter, setAdminCategoryFilter] = useState<number | 'all'>('all');
+  const [selectedPortraitIds, setSelectedPortraitIds] = useState<number[]>([]);
+  const [batchAction, setBatchAction] = useState<'add' | 'remove' | null>(null);
+  const [batchCategoryIds, setBatchCategoryIds] = useState<number[]>([]);
+  const [batchConfirming, setBatchConfirming] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!supabase) return;
@@ -172,6 +178,8 @@ export function AdminPage() {
       setCategoryRecords((items) => items.filter((category) => category.id !== item.id));
       setRelations((items) => items.filter((relation) => relation.category_id !== item.id));
       setSelectedCategoryIds((ids) => ids.filter((id) => id !== item.id));
+      setBatchCategoryIds((ids) => ids.filter((id) => id !== item.id));
+      if (adminCategoryFilter === item.id) setAdminCategoryFilter('all');
       setConfirmCategoryId(null);
       setMessage(`已删除分类：${item.name}，写真内容保持不变`);
     }
@@ -290,6 +298,7 @@ export function AdminPage() {
       if (path) await supabase.storage.from(portraitBucket).remove([path]);
       setRecords((items) => items.filter((record) => record.id !== item.id));
       setRelations((items) => items.filter((relation) => relation.portrait_id !== item.id));
+      setSelectedPortraitIds((ids) => ids.filter((id) => id !== item.id));
       setConfirmRecordId(null);
       if (editingId === item.id) clearForm();
       setMessage(`已删除 #${String(item.id).padStart(3, '0')} ${item.name}`);
@@ -303,6 +312,94 @@ export function AdminPage() {
     clearForm();
     setMessage('');
     setError('');
+  };
+
+  const visibleRecords = adminCategoryFilter === 'all'
+    ? records
+    : records.filter((item) => relations.some((relation) => relation.portrait_id === item.id && relation.category_id === adminCategoryFilter));
+  const allVisibleSelected = visibleRecords.length > 0 && visibleRecords.every((item) => selectedPortraitIds.includes(item.id));
+
+  const toggleBatchMode = () => {
+    setBatchMode((current) => !current);
+    setSelectedPortraitIds([]);
+    setBatchAction(null);
+    setBatchCategoryIds([]);
+    setBatchConfirming(false);
+  };
+
+  const togglePortraitSelection = (portraitId: number) => {
+    setSelectedPortraitIds((current) => current.includes(portraitId)
+      ? current.filter((id) => id !== portraitId)
+      : [...current, portraitId]);
+  };
+
+  const toggleVisibleSelection = () => {
+    const visibleIds = visibleRecords.map((item) => item.id);
+    setSelectedPortraitIds((current) => allVisibleSelected
+      ? current.filter((id) => !visibleIds.includes(id))
+      : [...new Set([...current, ...visibleIds])]);
+  };
+
+  const openBatchPanel = (action: 'add' | 'remove') => {
+    if (!selectedPortraitIds.length) {
+      setError('请先选择至少一条写真');
+      return;
+    }
+    setError('');
+    setMessage('');
+    setBatchAction(action);
+    setBatchCategoryIds([]);
+    setBatchConfirming(false);
+  };
+
+  const closeBatchPanel = () => {
+    setBatchAction(null);
+    setBatchCategoryIds([]);
+    setBatchConfirming(false);
+  };
+
+  const toggleBatchCategory = (categoryId: number) => {
+    setBatchCategoryIds((current) => current.includes(categoryId)
+      ? current.filter((id) => id !== categoryId)
+      : [...current, categoryId]);
+    setBatchConfirming(false);
+  };
+
+  const applyBatchCategories = async () => {
+    if (!supabase || !session || !batchAction || !selectedPortraitIds.length || !batchCategoryIds.length) return;
+    const portraitCount = selectedPortraitIds.length;
+    const categoryCount = batchCategoryIds.length;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      if (batchAction === 'add') {
+        const rows = selectedPortraitIds.flatMap((portraitId) => batchCategoryIds.map((categoryId) => ({
+          portrait_id: portraitId,
+          category_id: categoryId,
+        })));
+        const { error: addError } = await supabase
+          .from('portrait_categories')
+          .upsert(rows, { onConflict: 'portrait_id,category_id', ignoreDuplicates: true });
+        if (addError) throw addError;
+        setMessage(`已为 ${portraitCount} 条写真添加 ${categoryCount} 个分类`);
+      } else {
+        const { error: removeError } = await supabase
+          .from('portrait_categories')
+          .delete()
+          .in('portrait_id', selectedPortraitIds)
+          .in('category_id', batchCategoryIds);
+        if (removeError) throw removeError;
+        setMessage(`已从 ${portraitCount} 条写真移除 ${categoryCount} 个分类`);
+      }
+      await loadData();
+      setSelectedPortraitIds([]);
+      closeBatchPanel();
+    } catch (batchError) {
+      setError(batchError instanceof Error ? batchError.message : '批量操作失败，请重试');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!isSupabaseConfigured) {
@@ -388,11 +485,39 @@ export function AdminPage() {
       </section>
 
       <section className="admin-panel admin-list-panel">
-        <div className="admin-panel-heading"><div><span>03</span><h2>现有写真</h2></div><strong>{records.length} 条</strong></div>
+        <div className="admin-panel-heading">
+          <div><span>03</span><h2>现有写真</h2></div>
+          <div className="admin-list-heading-actions">
+            <strong>{adminCategoryFilter === 'all' ? records.length : `${visibleRecords.length} / ${records.length}`} 条</strong>
+            <button type="button" className={batchMode ? 'active' : ''} onClick={toggleBatchMode}><CheckSquare2 size={15} />{batchMode ? '退出批量' : '批量管理'}</button>
+          </div>
+        </div>
+        <div className="admin-list-toolbar">
+          <label>
+            <span>筛选</span>
+            <select value={adminCategoryFilter} onChange={(event) => setAdminCategoryFilter(event.target.value === 'all' ? 'all' : Number(event.target.value))}>
+              <option value="all">全部分类</option>
+              {categoryRecords.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+          {batchMode && (
+            <div className="admin-batch-actions">
+              <strong>已选择 {selectedPortraitIds.length} 条</strong>
+              <button type="button" onClick={toggleVisibleSelection} disabled={!visibleRecords.length}>{allVisibleSelected ? '取消全选' : '全选当前列表'}</button>
+              <button type="button" onClick={() => openBatchPanel('add')} disabled={!selectedPortraitIds.length || saving}><FolderPlus size={15} />添加分类</button>
+              <button type="button" onClick={() => openBatchPanel('remove')} disabled={!selectedPortraitIds.length || saving}><FolderMinus size={15} />移除分类</button>
+            </div>
+          )}
+        </div>
         {loading ? <p className="admin-list-state">正在加载…</p> : (
           <div className="admin-list">
-            {records.map((item) => (
-              <article className="admin-row" key={item.id}>
+            {visibleRecords.map((item) => (
+              <article className={`admin-row${batchMode ? ' is-batch' : ''}${selectedPortraitIds.includes(item.id) ? ' selected' : ''}`} key={item.id}>
+                {batchMode && (
+                  <label className="admin-row-select" aria-label={`选择 #${String(item.id).padStart(3, '0')} ${item.name}`}>
+                    <input type="checkbox" checked={selectedPortraitIds.includes(item.id)} onChange={() => togglePortraitSelection(item.id)} />
+                  </label>
+                )}
                 <img src={item.image_url} alt="" />
                 <div className="admin-row-copy"><span>#{String(item.id).padStart(3, '0')}</span><strong>{item.name}</strong><small>{relations.filter((relation) => relation.portrait_id === item.id).map((relation) => categoryRecords.find((category) => category.id === relation.category_id)?.name).filter(Boolean).join(' · ') || '未分类'}</small></div>
                 <div className="admin-row-actions">
@@ -401,10 +526,44 @@ export function AdminPage() {
                 </div>
               </article>
             ))}
-            {!records.length && <p className="admin-list-state">还没有写真内容</p>}
+            {!visibleRecords.length && <p className="admin-list-state">当前分类还没有写真内容</p>}
           </div>
         )}
       </section>
+
+      {batchAction && (
+        <div className="admin-batch-overlay" role="presentation">
+          <section className="admin-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-dialog-title">
+            <div className="admin-batch-dialog-heading">
+              <div><span>批量操作</span><h2 id="batch-dialog-title">{batchAction === 'add' ? '添加分类' : '移除分类'}</h2></div>
+              <button type="button" onClick={closeBatchPanel} aria-label="关闭"><X size={18} /></button>
+            </div>
+            <p>为已选择的 {selectedPortraitIds.length} 条写真选择一个或多个分类。</p>
+            <div className="admin-category-options admin-batch-category-options">
+              {categoryRecords.map((item) => (
+                <label key={item.id}>
+                  <input type="checkbox" checked={batchCategoryIds.includes(item.id)} onChange={() => toggleBatchCategory(item.id)} />
+                  <span>{item.name}</span>
+                </label>
+              ))}
+            </div>
+            {batchConfirming && (
+              <p className="admin-batch-confirm">
+                {batchAction === 'add' ? `确认将 ${selectedPortraitIds.length} 条写真添加到：` : `确认从 ${selectedPortraitIds.length} 条写真中移除：`}
+                {categoryRecords.filter((item) => batchCategoryIds.includes(item.id)).map((item) => item.name).join('、')}？
+              </p>
+            )}
+            <div className="admin-batch-dialog-actions">
+              <button type="button" onClick={closeBatchPanel}>取消</button>
+              {batchConfirming ? (
+                <button type="button" className={batchAction === 'remove' ? 'danger' : 'primary'} onClick={() => void applyBatchCategories()} disabled={saving}>{saving ? '处理中…' : batchAction === 'add' ? '确认添加' : '确认移除'}</button>
+              ) : (
+                <button type="button" className="primary" onClick={() => setBatchConfirming(true)} disabled={!batchCategoryIds.length}>继续</button>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

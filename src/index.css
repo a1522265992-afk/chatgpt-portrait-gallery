@@ -196,6 +196,37 @@ a { color: inherit; text-decoration: none; }
 .admin-category-row span { flex: 0 0 auto; color: #858178; font-size: .72rem; }
 .admin-category-row button { flex: 0 0 auto; height: 34px; padding: 0 11px; }
 .admin-category-row button.danger { color: #9b4039; }
+.admin-list-heading-actions { display: flex; align-items: center; gap: 10px; }
+.admin-list-heading-actions > strong { color: #858178; font-size: .78rem; }
+.admin-list-heading-actions button, .admin-list-toolbar button { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: #faf9f6; color: var(--ink); font-size: .76rem; }
+.admin-list-heading-actions button.active { border-color: var(--ink); background: var(--ink); color: #fff; }
+.admin-list-toolbar { display: grid; gap: 10px; margin: -4px 0 12px; padding: 11px; border-radius: 12px; background: #f7f5f0; }
+.admin-list-toolbar > label { display: flex; align-items: center; gap: 8px; }
+.admin-list-toolbar > label span { color: #77736b; font-size: .74rem; font-weight: 700; }
+.admin-list-toolbar select { min-width: 0; height: 36px; flex: 1; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: .78rem; }
+.admin-batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.admin-batch-actions strong { margin-right: auto; color: #55534f; font-size: .78rem; }
+.admin-batch-actions button:disabled { cursor: not-allowed; opacity: .45; }
+.admin-row.selected { background: #fbfae9; }
+.admin-row-select { display: grid; place-items: center; align-self: center; cursor: pointer; }
+.admin-row-select input { width: 18px; height: 18px; accent-color: var(--ink); }
+.admin-row.is-batch { grid-template-columns: 24px 58px minmax(0, 1fr); }
+.admin-row.is-batch .admin-row-actions { grid-column: 1 / -1; }
+.admin-batch-overlay { position: fixed; z-index: 20; inset: 0; display: grid; align-items: end; padding: 16px; background: rgba(35,34,31,.42); backdrop-filter: blur(3px); }
+.admin-batch-dialog { width: min(100%, 520px); max-height: calc(100vh - 32px); overflow-y: auto; margin: 0 auto; padding: 20px; border-radius: 18px; background: #fff; box-shadow: 0 18px 50px rgba(0,0,0,.16); }
+.admin-batch-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.admin-batch-dialog-heading > div { display: grid; gap: 4px; }
+.admin-batch-dialog-heading span { color: #99958c; font-size: .68rem; font-weight: 700; letter-spacing: .08em; }
+.admin-batch-dialog-heading h2 { margin: 0; font-size: 1.12rem; }
+.admin-batch-dialog-heading > button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: #faf9f6; color: var(--ink); }
+.admin-batch-dialog > p { margin: 14px 0; color: #77736b; font-size: .8rem; line-height: 1.55; }
+.admin-batch-category-options { max-height: 220px; overflow-y: auto; }
+.admin-batch-dialog .admin-batch-confirm { padding: 11px 12px; border-radius: 10px; background: #f1efe9; color: var(--ink); font-weight: 700; }
+.admin-batch-dialog-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; margin-top: 16px; }
+.admin-batch-dialog-actions button { height: 44px; border: 1px solid var(--line); border-radius: 10px; background: #faf9f6; color: var(--ink); font-weight: 700; }
+.admin-batch-dialog-actions button.primary { border-color: var(--ink); background: var(--ink); color: #fff; }
+.admin-batch-dialog-actions button.danger { border-color: #a24038; background: #a24038; color: #fff; }
+.admin-batch-dialog-actions button:disabled { cursor: not-allowed; opacity: .45; }
 
 @media (min-width: 700px) {
   .admin-page { padding: 48px 28px 80px; }
@@ -205,6 +236,12 @@ a { color: inherit; text-decoration: none; }
   .admin-prompt-field { grid-column: 2 / -1; }
   .admin-publish { grid-column: 2 / -1; }
   .admin-row { grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; }
+  .admin-row.is-batch { grid-template-columns: 24px 58px minmax(0, 1fr) auto; }
   .admin-row-actions { grid-column: auto; }
+  .admin-row.is-batch .admin-row-actions { grid-column: auto; }
   .admin-row-actions button { min-width: 74px; padding: 0 12px; }
+  .admin-list-toolbar { grid-template-columns: minmax(180px, 240px) 1fr; align-items: center; }
+  .admin-batch-actions { justify-content: flex-end; }
+  .admin-batch-actions strong { margin-right: 4px; }
+  .admin-batch-overlay { place-items: center; }
 }
