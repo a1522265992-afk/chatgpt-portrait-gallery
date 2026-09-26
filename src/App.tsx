@@ -1,21 +1,43 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Flame, Search, Sparkles, X } from 'lucide-react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
-import { categories, templates, type PhotoTemplate } from './gallery';
+import { categories, toPhotoTemplate, type PhotoTemplate, type PortraitRecord } from './gallery';
 import { AdminPage } from './AdminPage';
+import { supabase } from './supabase';
 
 function App() {
+  const [templates, setTemplates] = useState<PhotoTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoadError('写真数据暂时不可用');
+      setLoading(false);
+      return;
+    }
+    supabase
+      .from('portraits')
+      .select('id,name,category,prompt,image_url,created_at')
+      .order('id', { ascending: true })
+      .then(({ data, error }) => {
+        if (error) setLoadError('写真数据加载失败，请稍后重试');
+        else setTemplates(((data ?? []) as PortraitRecord[]).map(toPhotoTemplate));
+        setLoading(false);
+      });
+  }, []);
+
   return (
     <Routes>
-      <Route path="/" element={<GalleryPage />} />
-      <Route path="/style/:id" element={<DetailPage />} />
+      <Route path="/" element={<GalleryPage templates={templates} loading={loading} loadError={loadError} />} />
+      <Route path="/style/:id" element={<DetailPage templates={templates} loading={loading} />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
-function GalleryPage() {
+function GalleryPage({ templates, loading, loadError }: { templates: PhotoTemplate[]; loading: boolean; loadError: string }) {
   const [category, setCategory] = useState('全部');
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
@@ -29,7 +51,7 @@ function GalleryPage() {
     const inCategory = category === '全部' || (category === '热门' ? item.hot : item.category === category);
     const haystack = `${item.number} ${item.name} ${item.category} ${item.tags.join(' ')}`.toLowerCase();
     return inCategory && (!deferredQuery || haystack.includes(deferredQuery));
-  }), [category, deferredQuery]);
+  }), [category, deferredQuery, templates]);
 
   return (
     <main className="gallery-page">
@@ -58,7 +80,11 @@ function GalleryPage() {
         <span>{category === '全部' ? '本期精选' : category}</span>
         <span>{String(filtered.length).padStart(2, '0')} 款</span>
       </section>
-      {filtered.length ? (
+      {loading ? (
+        <section className="empty-state"><span>正在加载写真…</span></section>
+      ) : loadError ? (
+        <section className="empty-state"><span>{loadError}</span></section>
+      ) : filtered.length ? (
         <section className="masonry" aria-label="写真模板">
           {filtered.map((item, index) => <TemplateCard key={item.id} item={item} index={index} />)}
         </section>
@@ -82,7 +108,7 @@ function TemplateCard({ item, index }: { item: PhotoTemplate; index: number }) {
   );
 }
 
-function DetailPage() {
+function DetailPage({ templates, loading }: { templates: PhotoTemplate[]; loading: boolean }) {
   const { id } = useParams();
   const item = templates.find((template) => template.id === id);
   const [slide, setSlide] = useState(0);
@@ -96,6 +122,7 @@ function DetailPage() {
     if (item) document.title = `${item.number} ${item.name}｜ChatGPT 写真馆`;
   }, [item]);
 
+  if (loading) return <main className="detail-page"><section className="empty-state"><span>正在加载写真…</span></section></main>;
   if (!item) return <Navigate to="/" replace />;
 
   const go = (direction: number) => setSlide((current) => (current + direction + item.images.length) % item.images.length);

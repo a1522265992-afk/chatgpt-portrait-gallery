@@ -12,6 +12,7 @@
     "generate:data": "node scripts/generate-data.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.0",

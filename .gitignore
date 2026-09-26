@@ -6,5 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.production
 gui-test-screenshots/
 .sites-runtime/
