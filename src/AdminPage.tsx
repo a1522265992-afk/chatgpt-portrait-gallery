@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { ImagePlus, LogOut, Pencil, Trash2, X } from 'lucide-react';
+import { ImagePlus, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
-import { categories, type PortraitRecord } from './gallery';
+import type { CategoryRecord, PortraitCategoryRecord, PortraitRecord } from './gallery';
 import { isSupabaseConfigured, portraitBucket, supabase } from './supabase';
 
-const contentCategories = categories.filter((category) => category !== '全部' && category !== '热门');
-const portraitFields = 'id,name,category,prompt,image_url,created_at';
+const portraitFields = 'id,name,prompt,image_url,created_at';
+const categoryFields = 'id,name,created_at';
+const relationFields = 'portrait_id,category_id,created_at';
 
 function getExtension(fileName: string) {
   const extension = fileName.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -24,9 +25,14 @@ export function AdminPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [records, setRecords] = useState<PortraitRecord[]>([]);
+  const [categoryRecords, setCategoryRecords] = useState<CategoryRecord[]>([]);
+  const [relations, setRelations] = useState<PortraitCategoryRecord[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [confirmCategoryId, setConfirmCategoryId] = useState<number | null>(null);
+  const [confirmRecordId, setConfirmRecordId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState('');
-  const [category, setCategory] = useState(contentCategories[0]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [prompt, setPrompt] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -36,16 +42,22 @@ export function AdminPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const loadRecords = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!supabase) return;
     setLoading(true);
     setError('');
-    const { data, error: loadError } = await supabase
-      .from('portraits')
-      .select(portraitFields)
-      .order('id', { ascending: true });
+    const [portraitResult, categoryResult, relationResult] = await Promise.all([
+      supabase.from('portraits').select(portraitFields).order('id', { ascending: true }),
+      supabase.from('categories').select(categoryFields).order('id', { ascending: true }),
+      supabase.from('portrait_categories').select(relationFields),
+    ]);
+    const loadError = portraitResult.error ?? categoryResult.error ?? relationResult.error;
     if (loadError) setError(loadError.message);
-    else setRecords((data ?? []) as PortraitRecord[]);
+    else {
+      setRecords((portraitResult.data ?? []) as PortraitRecord[]);
+      setCategoryRecords((categoryResult.data ?? []) as CategoryRecord[]);
+      setRelations((relationResult.data ?? []) as PortraitCategoryRecord[]);
+    }
     setLoading(false);
   }, []);
 
@@ -68,15 +80,19 @@ export function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (session) void loadRecords();
-    else setRecords([]);
-  }, [loadRecords, session]);
+    if (session) void loadData();
+    else {
+      setRecords([]);
+      setCategoryRecords([]);
+      setRelations([]);
+    }
+  }, [loadData, session]);
 
   const clearForm = () => {
     if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
     setEditingId(null);
     setName('');
-    setCategory(contentCategories[0]);
+    setSelectedCategoryIds([]);
     setPrompt('');
     setSelectedFile(null);
     setPreviewUrl(null);
@@ -117,6 +133,51 @@ export function AdminPage() {
     setSaving(false);
   };
 
+  const toggleCategory = (categoryId: number) => {
+    setSelectedCategoryIds((current) => current.includes(categoryId)
+      ? current.filter((id) => id !== categoryId)
+      : [...current, categoryId]);
+  };
+
+  const createCategory = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase || !session) return;
+    const cleanName = newCategoryName.trim();
+    if (!cleanName) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    const { data, error: createError } = await supabase
+      .from('categories')
+      .insert({ name: cleanName })
+      .select(categoryFields)
+      .single();
+    if (createError) setError(createError.code === '23505' ? '这个分类已经存在' : createError.message);
+    else {
+      setCategoryRecords((items) => [...items, data as CategoryRecord].sort((a, b) => a.id - b.id));
+      setNewCategoryName('');
+      setMessage(`已新增分类：${cleanName}`);
+    }
+    setSaving(false);
+  };
+
+  const deleteCategory = async (item: CategoryRecord) => {
+    if (!supabase) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    const { error: deleteError } = await supabase.from('categories').delete().eq('id', item.id);
+    if (deleteError) setError(deleteError.message);
+    else {
+      setCategoryRecords((items) => items.filter((category) => category.id !== item.id));
+      setRelations((items) => items.filter((relation) => relation.category_id !== item.id));
+      setSelectedCategoryIds((ids) => ids.filter((id) => id !== item.id));
+      setConfirmCategoryId(null);
+      setMessage(`已删除分类：${item.name}，写真内容保持不变`);
+    }
+    setSaving(false);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase || !session) return;
@@ -136,7 +197,6 @@ export function AdminPage() {
         if (!current) throw new Error('未找到要编辑的写真');
         const values = {
           name: cleanName,
-          category,
           prompt: cleanPrompt,
           ...(uploaded ? { image_url: uploaded.publicUrl } : {}),
         };
@@ -147,7 +207,28 @@ export function AdminPage() {
           .select(portraitFields)
           .single();
         if (updateError) throw updateError;
+        const currentCategoryIds = relations.filter((relation) => relation.portrait_id === editingId).map((relation) => relation.category_id);
+        const addedIds = selectedCategoryIds.filter((id) => !currentCategoryIds.includes(id));
+        const removedIds = currentCategoryIds.filter((id) => !selectedCategoryIds.includes(id));
+        if (addedIds.length) {
+          const { error: relationInsertError } = await supabase
+            .from('portrait_categories')
+            .insert(addedIds.map((categoryId) => ({ portrait_id: editingId, category_id: categoryId })));
+          if (relationInsertError) throw relationInsertError;
+        }
+        if (removedIds.length) {
+          const { error: relationDeleteError } = await supabase
+            .from('portrait_categories')
+            .delete()
+            .eq('portrait_id', editingId)
+            .in('category_id', removedIds);
+          if (relationDeleteError) throw relationDeleteError;
+        }
         setRecords((items) => items.map((item) => item.id === editingId ? data as PortraitRecord : item));
+        setRelations((items) => [
+          ...items.filter((relation) => relation.portrait_id !== editingId),
+          ...selectedCategoryIds.map((categoryId) => ({ portrait_id: editingId, category_id: categoryId, created_at: new Date().toISOString() })),
+        ]);
         if (uploaded) {
           const oldPath = getStoragePath(current.image_url);
           if (oldPath) await supabase.storage.from(portraitBucket).remove([oldPath]);
@@ -156,11 +237,24 @@ export function AdminPage() {
       } else {
         const { data, error: insertError } = await supabase
           .from('portraits')
-          .insert({ name: cleanName, category, prompt: cleanPrompt, image_url: uploaded!.publicUrl })
+          .insert({ name: cleanName, prompt: cleanPrompt, image_url: uploaded!.publicUrl })
           .select(portraitFields)
           .single();
         if (insertError) throw insertError;
+        if (selectedCategoryIds.length) {
+          const { error: relationError } = await supabase
+            .from('portrait_categories')
+            .insert(selectedCategoryIds.map((categoryId) => ({ portrait_id: data.id, category_id: categoryId })));
+          if (relationError) {
+            await supabase.from('portraits').delete().eq('id', data.id);
+            throw relationError;
+          }
+        }
         setRecords((items) => [...items, data as PortraitRecord].sort((a, b) => a.id - b.id));
+        setRelations((items) => [
+          ...items,
+          ...selectedCategoryIds.map((categoryId) => ({ portrait_id: data.id, category_id: categoryId, created_at: new Date().toISOString() })),
+        ]);
         setMessage(`已发布 #${String(data.id).padStart(3, '0')} ${data.name}`);
       }
       clearForm();
@@ -176,7 +270,7 @@ export function AdminPage() {
     clearForm();
     setEditingId(item.id);
     setName(item.name);
-    setCategory(item.category);
+    setSelectedCategoryIds(relations.filter((relation) => relation.portrait_id === item.id).map((relation) => relation.category_id));
     setPrompt(item.prompt);
     setPreviewUrl(item.image_url);
     setMessage('');
@@ -185,7 +279,7 @@ export function AdminPage() {
   };
 
   const deleteRecord = async (item: PortraitRecord) => {
-    if (!supabase || !window.confirm(`确定删除 #${String(item.id).padStart(3, '0')} ${item.name} 吗？`)) return;
+    if (!supabase) return;
     setSaving(true);
     setError('');
     const { error: deleteError } = await supabase.from('portraits').delete().eq('id', item.id);
@@ -195,6 +289,8 @@ export function AdminPage() {
       const path = getStoragePath(item.image_url);
       if (path) await supabase.storage.from(portraitBucket).remove([path]);
       setRecords((items) => items.filter((record) => record.id !== item.id));
+      setRelations((items) => items.filter((relation) => relation.portrait_id !== item.id));
+      setConfirmRecordId(null);
       if (editingId === item.id) clearForm();
       setMessage(`已删除 #${String(item.id).padStart(3, '0')} ${item.name}`);
     }
@@ -252,7 +348,18 @@ export function AdminPage() {
             </div>
           </label>
           <label className="admin-field"><span>名称</span><input type="text" value={name} onChange={(event) => setName(event.target.value)} placeholder="输入写真名称" required /></label>
-          <label className="admin-field"><span>分类</span><select value={category} onChange={(event) => setCategory(event.target.value)}>{contentCategories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          <fieldset className="admin-field admin-category-field">
+            <legend>分类</legend>
+            <div className="admin-category-options">
+              {categoryRecords.map((item) => (
+                <label key={item.id}>
+                  <input type="checkbox" checked={selectedCategoryIds.includes(item.id)} onChange={() => toggleCategory(item.id)} />
+                  <span>{item.name}</span>
+                </label>
+              ))}
+              {!categoryRecords.length && <small>请先在下方新建分类</small>}
+            </div>
+          </fieldset>
           <label className="admin-field admin-prompt-field"><span>提示词</span><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="输入完整 AI 图片生成提示词" rows={6} required /></label>
           <button type="submit" className="admin-publish" disabled={saving}>{saving ? '保存中…' : '发布'}</button>
         </form>
@@ -260,17 +367,37 @@ export function AdminPage() {
         {error && <p className="admin-error">{error}</p>}
       </section>
 
+      <section className="admin-panel admin-category-panel">
+        <div className="admin-panel-heading"><div><span>02</span><h2>分类管理</h2></div><strong>{categoryRecords.length} 个</strong></div>
+        <form className="admin-category-create" onSubmit={createCategory}>
+          <input type="text" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="输入分类名称" aria-label="分类名称" required />
+          <button type="submit" disabled={saving}><Plus size={16} />新增分类</button>
+        </form>
+        <div className="admin-category-list">
+          {categoryRecords.map((item) => {
+            const count = relations.filter((relation) => relation.category_id === item.id).length;
+            return (
+              <div className="admin-category-row" key={item.id}>
+                <div><strong>{item.name}</strong><span>{count} 款写真</span></div>
+                <button type="button" className="danger" onClick={() => confirmCategoryId === item.id ? void deleteCategory(item) : setConfirmCategoryId(item.id)} disabled={saving}><Trash2 size={15} />{confirmCategoryId === item.id ? '确认删除' : '删除'}</button>
+              </div>
+            );
+          })}
+          {!categoryRecords.length && !loading && <p className="admin-list-state">还没有分类</p>}
+        </div>
+      </section>
+
       <section className="admin-panel admin-list-panel">
-        <div className="admin-panel-heading"><div><span>02</span><h2>现有写真</h2></div><strong>{records.length} 条</strong></div>
+        <div className="admin-panel-heading"><div><span>03</span><h2>现有写真</h2></div><strong>{records.length} 条</strong></div>
         {loading ? <p className="admin-list-state">正在加载…</p> : (
           <div className="admin-list">
             {records.map((item) => (
               <article className="admin-row" key={item.id}>
                 <img src={item.image_url} alt="" />
-                <div className="admin-row-copy"><span>#{String(item.id).padStart(3, '0')}</span><strong>{item.name}</strong><small>{item.category}</small></div>
+                <div className="admin-row-copy"><span>#{String(item.id).padStart(3, '0')}</span><strong>{item.name}</strong><small>{relations.filter((relation) => relation.portrait_id === item.id).map((relation) => categoryRecords.find((category) => category.id === relation.category_id)?.name).filter(Boolean).join(' · ') || '未分类'}</small></div>
                 <div className="admin-row-actions">
                   <button type="button" onClick={() => editRecord(item)} disabled={saving}><Pencil size={15} />编辑</button>
-                  <button type="button" className="danger" onClick={() => void deleteRecord(item)} disabled={saving}><Trash2 size={15} />删除</button>
+                  <button type="button" className="danger" onClick={() => confirmRecordId === item.id ? void deleteRecord(item) : setConfirmRecordId(item.id)} disabled={saving}><Trash2 size={15} />{confirmRecordId === item.id ? '确认删除' : '删除'}</button>
                 </div>
               </article>
             ))}

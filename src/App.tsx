@@ -1,12 +1,13 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Flame, Search, Sparkles, X } from 'lucide-react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
-import { categories, toPhotoTemplate, type PhotoTemplate, type PortraitRecord } from './gallery';
+import { toPhotoTemplate, type CategoryRecord, type PhotoTemplate, type PortraitCategoryRecord, type PortraitRecord } from './gallery';
 import { AdminPage } from './AdminPage';
 import { supabase } from './supabase';
 
 function App() {
   const [templates, setTemplates] = useState<PhotoTemplate[]>([]);
+  const [categoryNames, setCategoryNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -16,20 +17,34 @@ function App() {
       setLoading(false);
       return;
     }
-    supabase
-      .from('portraits')
-      .select('id,name,category,prompt,image_url,created_at')
-      .order('id', { ascending: true })
-      .then(({ data, error }) => {
-        if (error) setLoadError('写真数据加载失败，请稍后重试');
-        else setTemplates(((data ?? []) as PortraitRecord[]).map(toPhotoTemplate));
+    Promise.all([
+      supabase.from('portraits').select('id,name,prompt,image_url,created_at').order('id', { ascending: true }),
+      supabase.from('categories').select('id,name,created_at').order('id', { ascending: true }),
+      supabase.from('portrait_categories').select('portrait_id,category_id,created_at'),
+    ]).then(([portraitResult, categoryResult, relationResult]) => {
+        if (portraitResult.error || categoryResult.error || relationResult.error) {
+          setLoadError('写真数据加载失败，请稍后重试');
+        } else {
+          const portraits = (portraitResult.data ?? []) as PortraitRecord[];
+          const availableCategories = (categoryResult.data ?? []) as CategoryRecord[];
+          const relations = (relationResult.data ?? []) as PortraitCategoryRecord[];
+          const categoryById = new Map(availableCategories.map((item) => [item.id, item.name]));
+          const namesByPortrait = new Map<number, string[]>();
+          relations.forEach((relation) => {
+            const categoryName = categoryById.get(relation.category_id);
+            if (!categoryName) return;
+            namesByPortrait.set(relation.portrait_id, [...(namesByPortrait.get(relation.portrait_id) ?? []), categoryName]);
+          });
+          setCategoryNames(availableCategories.map((item) => item.name));
+          setTemplates(portraits.map((record) => toPhotoTemplate(record, namesByPortrait.get(record.id) ?? [])));
+        }
         setLoading(false);
       });
   }, []);
 
   return (
     <Routes>
-      <Route path="/" element={<GalleryPage templates={templates} loading={loading} loadError={loadError} />} />
+      <Route path="/" element={<GalleryPage templates={templates} categoryNames={categoryNames} loading={loading} loadError={loadError} />} />
       <Route path="/style/:id" element={<DetailPage templates={templates} loading={loading} />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -37,7 +52,7 @@ function App() {
   );
 }
 
-function GalleryPage({ templates, loading, loadError }: { templates: PhotoTemplate[]; loading: boolean; loadError: string }) {
+function GalleryPage({ templates, categoryNames, loading, loadError }: { templates: PhotoTemplate[]; categoryNames: string[]; loading: boolean; loadError: string }) {
   const [category, setCategory] = useState('全部');
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
@@ -48,8 +63,8 @@ function GalleryPage({ templates, loading, loadError }: { templates: PhotoTempla
   }, []);
 
   const filtered = useMemo(() => templates.filter((item) => {
-    const inCategory = category === '全部' || (category === '热门' ? item.hot : item.category === category);
-    const haystack = `${item.number} ${item.name} ${item.category} ${item.tags.join(' ')}`.toLowerCase();
+    const inCategory = category === '全部' || item.categories.includes(category);
+    const haystack = `${item.number} ${item.name} ${item.categories.join(' ')} ${item.tags.join(' ')}`.toLowerCase();
     return inCategory && (!deferredQuery || haystack.includes(deferredQuery));
   }), [category, deferredQuery, templates]);
 
@@ -71,7 +86,7 @@ function GalleryPage({ templates, loading, loadError }: { templates: PhotoTempla
           {query && <button type="button" className="clear-search" onClick={() => setQuery('')} aria-label="清空搜索"><X size={16} /></button>}
         </label>
         <div className="category-scroll" role="tablist" aria-label="写真分类">
-          {categories.map((item) => (
+          {['全部', ...categoryNames].map((item) => (
             <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? 'category-chip active' : 'category-chip'} onClick={() => setCategory(item)}>{item}</button>
           ))}
         </div>
