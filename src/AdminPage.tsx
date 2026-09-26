@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } fr
 import { CheckSquare2, FolderMinus, FolderPlus, ImagePlus, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import type { CategoryRecord, PortraitCategoryRecord, PortraitRecord } from './gallery';
+import { notifyGalleryDataChanged } from './gallerySync';
 import { isSupabaseConfigured, portraitBucket, supabase } from './supabase';
 
 const portraitFields = 'id,name,prompt,image_url,created_at';
@@ -163,6 +164,7 @@ export function AdminPage() {
       setCategoryRecords((items) => [...items, data as CategoryRecord].sort((a, b) => a.id - b.id));
       setNewCategoryName('');
       setMessage(`已新增分类：${cleanName}`);
+      notifyGalleryDataChanged();
     }
     setSaving(false);
   };
@@ -182,6 +184,7 @@ export function AdminPage() {
       if (adminCategoryFilter === item.id) setAdminCategoryFilter('all');
       setConfirmCategoryId(null);
       setMessage(`已删除分类：${item.name}，写真内容保持不变`);
+      notifyGalleryDataChanged();
     }
     setSaving(false);
   };
@@ -265,6 +268,7 @@ export function AdminPage() {
         ]);
         setMessage(`已发布 #${String(data.id).padStart(3, '0')} ${data.name}`);
       }
+      notifyGalleryDataChanged();
       clearForm();
     } catch (submitError) {
       if (uploaded) await supabase.storage.from(portraitBucket).remove([uploaded.path]);
@@ -302,6 +306,7 @@ export function AdminPage() {
       setConfirmRecordId(null);
       if (editingId === item.id) clearForm();
       setMessage(`已删除 #${String(item.id).padStart(3, '0')} ${item.name}`);
+      notifyGalleryDataChanged();
     }
     setSaving(false);
   };
@@ -393,6 +398,7 @@ export function AdminPage() {
         setMessage(`已从 ${portraitCount} 条写真移除 ${categoryCount} 个分类`);
       }
       await loadData();
+      notifyGalleryDataChanged();
       setSelectedPortraitIds([]);
       closeBatchPanel();
     } catch (batchError) {

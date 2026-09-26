@@ -1,8 +1,9 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Flame, Search, Sparkles, X } from 'lucide-react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { toPhotoTemplate, type CategoryRecord, type PhotoTemplate, type PortraitCategoryRecord, type PortraitRecord } from './gallery';
 import { AdminPage } from './AdminPage';
+import { subscribeToGalleryDataChanges } from './gallerySync';
 import { supabase } from './supabase';
 
 function App() {
@@ -11,36 +12,46 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  useEffect(() => {
+  const loadGalleryData = useCallback(async () => {
     if (!supabase) {
+      setTemplates([]);
+      setCategoryNames([]);
       setLoadError('写真数据暂时不可用');
       setLoading(false);
       return;
     }
-    Promise.all([
+    setLoading(true);
+    setLoadError('');
+    const [portraitResult, categoryResult, relationResult] = await Promise.all([
       supabase.from('portraits').select('id,name,prompt,image_url,created_at').order('id', { ascending: true }),
       supabase.from('categories').select('id,name,created_at').order('id', { ascending: true }),
       supabase.from('portrait_categories').select('portrait_id,category_id,created_at'),
-    ]).then(([portraitResult, categoryResult, relationResult]) => {
-        if (portraitResult.error || categoryResult.error || relationResult.error) {
-          setLoadError('写真数据加载失败，请稍后重试');
-        } else {
-          const portraits = (portraitResult.data ?? []) as PortraitRecord[];
-          const availableCategories = (categoryResult.data ?? []) as CategoryRecord[];
-          const relations = (relationResult.data ?? []) as PortraitCategoryRecord[];
-          const categoryById = new Map(availableCategories.map((item) => [item.id, item.name]));
-          const namesByPortrait = new Map<number, string[]>();
-          relations.forEach((relation) => {
-            const categoryName = categoryById.get(relation.category_id);
-            if (!categoryName) return;
-            namesByPortrait.set(relation.portrait_id, [...(namesByPortrait.get(relation.portrait_id) ?? []), categoryName]);
-          });
-          setCategoryNames(availableCategories.map((item) => item.name));
-          setTemplates(portraits.map((record) => toPhotoTemplate(record, namesByPortrait.get(record.id) ?? [])));
-        }
-        setLoading(false);
+    ]);
+    if (portraitResult.error || categoryResult.error || relationResult.error) {
+      setTemplates([]);
+      setCategoryNames([]);
+      setLoadError('写真数据加载失败，请稍后重试');
+    } else {
+      const portraits = (portraitResult.data ?? []) as PortraitRecord[];
+      const availableCategories = (categoryResult.data ?? []) as CategoryRecord[];
+      const relations = (relationResult.data ?? []) as PortraitCategoryRecord[];
+      const categoryById = new Map(availableCategories.map((item) => [item.id, item.name]));
+      const namesByPortrait = new Map<number, string[]>();
+      relations.forEach((relation) => {
+        const categoryName = categoryById.get(relation.category_id);
+        if (!categoryName) return;
+        namesByPortrait.set(relation.portrait_id, [...(namesByPortrait.get(relation.portrait_id) ?? []), categoryName]);
       });
+      setCategoryNames(availableCategories.map((item) => item.name));
+      setTemplates(portraits.map((record) => toPhotoTemplate(record, namesByPortrait.get(record.id) ?? [])));
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void loadGalleryData();
+    return subscribeToGalleryDataChanges(() => void loadGalleryData());
+  }, [loadGalleryData]);
 
   return (
     <Routes>
@@ -61,6 +72,10 @@ function GalleryPage({ templates, categoryNames, loading, loadError }: { templat
     document.title = 'ChatGPT 写真馆';
     window.scrollTo(0, 0);
   }, []);
+
+  useEffect(() => {
+    if (category !== '全部' && !categoryNames.includes(category)) setCategory('全部');
+  }, [category, categoryNames]);
 
   const filtered = useMemo(() => templates.filter((item) => {
     const inCategory = category === '全部' || item.categories.includes(category);
