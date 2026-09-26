@@ -2,12 +2,14 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Flame, Search, Sparkles, X } from 'lucide-react';
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { categories, templates, type PhotoTemplate } from './gallery';
+import { AdminPage } from './AdminPage';
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<GalleryPage />} />
       <Route path="/style/:id" element={<DetailPage />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
