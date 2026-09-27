@@ -218,6 +218,11 @@ function DetailPage({ templates, loading }: { templates: PhotoTemplate[]; loadin
               <img src="/wechat-qr.png" alt="微信二维码，点击放大" role="button" tabIndex={0} onClick={() => setQrOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setQrOpen(true); }} />
               <span>点击放大 · 长按二维码保存 / 识别添加微信</span>
             </div>
+            <div className="price-info" aria-label="价格信息">
+              <p className="price-tier"><strong>¥8.88</strong><span> / 10张</span></p>
+              <p className="price-tier"><strong>¥38</strong><span> / 月 · 无限量</span></p>
+              <p className="price-note">每张照片支持 5 次修改</p>
+            </div>
             <button type="button" className="copy-number-button" onClick={() => copyNumber(`${item.number} ${item.name}`)}>{numberCopied ? <Check size={17} /> : <Copy size={17} />}{numberCopied ? '模板编号已复制' : '复制模板编号'}</button>
           </section>
         </div>
