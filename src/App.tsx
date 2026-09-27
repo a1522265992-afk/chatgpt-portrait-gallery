@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Flame, Search, Sparkles, X } from 'lucide-react';
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { toPhotoTemplate, type CategoryRecord, type PhotoTemplate, type PortraitCategoryRecord, type PortraitRecord } from './gallery';
+import { getGalleryThumbnailUrl, toPhotoTemplate, type CategoryRecord, type PhotoTemplate, type PortraitCategoryRecord, type PortraitRecord } from './gallery';
 import { AdminPage } from './AdminPage';
 import { subscribeToGalleryDataChanges } from './gallerySync';
 import { supabase } from './supabase';
@@ -241,10 +241,18 @@ function LoopingGallery({ items, cacheKey }: { items: PhotoTemplate[]; cacheKey:
 }
 
 function TemplateCard({ item, index }: { item: PhotoTemplate; index: number }) {
+  const thumbnailUrl = getGalleryThumbnailUrl(item.images[0]);
   return (
     <Link to={`/style/${item.id}`} className={`template-card card-${index % 4}`} aria-label={`${item.number} ${item.name}`}>
       <div className="card-image">
-        <img src={item.images[0]} alt={`${item.name}效果图`} loading={index > 3 ? 'lazy' : 'eager'} />
+        <img
+          src={thumbnailUrl}
+          alt={`${item.name}效果图`}
+          width="480"
+          height="640"
+          loading={index < 6 ? 'eager' : 'lazy'}
+          decoding="async"
+        />
         {item.hot && <span className="hot-badge"><Flame size={12} fill="currentColor" /> HOT</span>}
       </div>
       <div className="card-body">

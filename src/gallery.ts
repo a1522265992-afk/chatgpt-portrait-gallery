@@ -30,6 +30,22 @@ export type PhotoTemplate = {
   description: string;
 };
 
+export function getGalleryThumbnailUrl(sourceUrl: string) {
+  try {
+    const url = new URL(sourceUrl);
+    const publicStoragePath = '/storage/v1/object/public/';
+    if (!url.hostname.endsWith('.supabase.co') || !url.pathname.includes(publicStoragePath)) return sourceUrl;
+
+    url.pathname = url.pathname.replace(publicStoragePath, '/storage/v1/render/image/public/');
+    url.searchParams.set('width', '600');
+    url.searchParams.set('quality', '78');
+    url.searchParams.set('resize', 'contain');
+    return url.toString();
+  } catch {
+    return sourceUrl;
+  }
+}
+
 export function toPhotoTemplate(record: Omit<PortraitRecord, 'prompt'>, categoryNames: string[]): PhotoTemplate {
   const id = String(record.id).padStart(3, '0');
   const primaryCategory = categoryNames[0] ?? '未分类';
