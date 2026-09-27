@@ -98,10 +98,11 @@ a { color: inherit; text-decoration: none; }
 .qr-wrap { display: grid; justify-items: center; gap: 9px; margin: 15px 0; }
 .qr-wrap img { width: min(172px, 52vw); height: min(172px, 52vw); display: block; padding: 7px; border: 1px solid var(--line); border-radius: 14px; object-fit: contain; background: #fff; cursor: zoom-in; -webkit-touch-callout: default; user-select: auto; }
 .qr-wrap span { color: #7e7a73; font-size: .75rem; text-align: center; }
-.price-info { display: grid; gap: 7px; margin: 12px 0 14px; }
-.price-tier { display: flex; align-items: baseline; justify-content: center; margin: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; background: #fff; color: #4f4c47; font-size: .9rem; }
-.price-tier strong { color: #22211f; font-size: 1.18rem; font-weight: 800; letter-spacing: -.02em; }
-.price-note { margin: 2px 0 0; color: #918d85; font-size: .75rem; line-height: 1.5; text-align: center; }
+.price-info { display: grid; justify-items: center; gap: 5px; margin: 10px 0 13px; text-align: center; }
+.price-line { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 0; color: #5a5751; font-size: clamp(.78rem, 3.45vw, .9rem); line-height: 1.45; white-space: nowrap; }
+.price-line strong { color: #292824; font-weight: 680; }
+.price-separator { color: #aaa69e; }
+.price-note { margin: 0; color: #aaa69e; font-size: .7rem; line-height: 1.45; }
 .copy-number-button { width: 100%; height: 49px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 13px; background: #dcefe3; color: #1f5f39; font-weight: 700; }
 .qr-preview { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: max(48px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom)); background: rgba(9,9,9,.82); backdrop-filter: blur(8px); animation: fadeIn .18s ease; }
 .qr-preview-card { width: min(100%, 430px); display: grid; justify-items: center; gap: 14px; padding: clamp(18px, 5vw, 28px); border-radius: 22px; background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.24); }
