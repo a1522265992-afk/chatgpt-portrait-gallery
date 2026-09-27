@@ -115,9 +115,16 @@ function GalleryPage({ templates, categoryNames, loading, loadError }: { templat
       ) : loadError ? (
         <section className="empty-state"><span>{loadError}</span></section>
       ) : filtered.length ? (
-        <section className="masonry" aria-label="写真模板">
-          {filtered.map((item, index) => <TemplateCard key={item.id} item={item} index={index} />)}
-        </section>
+        <>
+          <section className="masonry" aria-label="写真模板">
+            {filtered.map((item, index) => <TemplateCard key={item.id} item={item} index={index} />)}
+          </section>
+          <section className="gallery-ending" aria-label="写真馆更新说明">
+            <p className="gallery-ending-label">Members Library</p>
+            <p className="gallery-ending-title">这里展示的，只是一小部分。</p>
+            <p className="gallery-ending-copy">更多写真模板，每周持续更新。</p>
+          </section>
+        </>
       ) : (
         <section className="empty-state"><span>没有找到匹配的风格</span><button type="button" onClick={() => { setQuery(''); setCategory('全部'); }}>看看全部模板</button></section>
       )}
