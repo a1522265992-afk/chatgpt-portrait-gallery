@@ -167,11 +167,11 @@ function LoopingGallery({ items, cacheKey }: { items: PhotoTemplate[]; cacheKey:
 
   useEffect(() => {
     let savedScroll = galleryFeedCache.key === cacheKey ? galleryFeedCache.scrollY : 0;
+    let storedScroll: { key?: string; scrollY?: number } | null = null;
     try {
-      const stored = JSON.parse(window.sessionStorage.getItem('portrait-gallery-scroll') ?? 'null') as { key?: string; scrollY?: number } | null;
-      if (stored?.key === cacheKey && typeof stored.scrollY === 'number') {
-        savedScroll = stored.scrollY;
-        window.sessionStorage.removeItem('portrait-gallery-scroll');
+      storedScroll = JSON.parse(window.sessionStorage.getItem('portrait-gallery-scroll') ?? 'null') as { key?: string; scrollY?: number } | null;
+      if (storedScroll?.key === cacheKey && typeof storedScroll.scrollY === 'number') {
+        savedScroll = storedScroll.scrollY;
       }
     } catch {
       window.sessionStorage.removeItem('portrait-gallery-scroll');
@@ -183,7 +183,10 @@ function LoopingGallery({ items, cacheKey }: { items: PhotoTemplate[]; cacheKey:
       document.documentElement.style.scrollBehavior = previousBehavior;
     };
     const frame = window.requestAnimationFrame(restore);
-    const timer = window.setTimeout(restore, 300);
+    const timer = window.setTimeout(() => {
+      restore();
+      if (storedScroll?.key === cacheKey) window.sessionStorage.removeItem('portrait-gallery-scroll');
+    }, 500);
     return () => { window.cancelAnimationFrame(frame); window.clearTimeout(timer); };
   }, [cacheKey]);
 
