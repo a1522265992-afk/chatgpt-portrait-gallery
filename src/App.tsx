@@ -1,10 +1,9 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Flame, Search, Sparkles, X } from 'lucide-react';
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { getGalleryThumbnailUrl, toPhotoTemplate, type CategoryRecord, type PhotoTemplate, type PortraitCategoryRecord, type PortraitRecord } from './gallery';
-import { AdminPage } from './AdminPage';
-import { subscribeToGalleryDataChanges } from './gallerySync';
-import { supabase } from './supabase';
+import { toStaticPhotoTemplate, type PhotoTemplate, type StaticGalleryData } from './gallery';
+
+const AdminPage = lazy(() => import('./AdminPage').then((module) => ({ default: module.AdminPage })));
 
 type GalleryFeedCache = {
   key: string;
@@ -43,52 +42,35 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const loadGalleryData = useCallback(async () => {
-    if (!supabase) {
-      setTemplates([]);
-      setCategoryNames([]);
-      setLoadError('写真数据暂时不可用');
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setLoadError('');
-    const [portraitResult, categoryResult, relationResult] = await Promise.all([
-      supabase.from('portraits').select('id,name,image_url,created_at').order('id', { ascending: true }),
-      supabase.from('categories').select('id,name,created_at').order('id', { ascending: true }),
-      supabase.from('portrait_categories').select('portrait_id,category_id,created_at'),
-    ]);
-    if (portraitResult.error || categoryResult.error || relationResult.error) {
-      setTemplates([]);
-      setCategoryNames([]);
-      setLoadError('写真数据加载失败，请稍后重试');
-    } else {
-      const portraits = (portraitResult.data ?? []) as PortraitRecord[];
-      const availableCategories = (categoryResult.data ?? []) as CategoryRecord[];
-      const relations = (relationResult.data ?? []) as PortraitCategoryRecord[];
-      const categoryById = new Map(availableCategories.map((item) => [item.id, item.name]));
-      const namesByPortrait = new Map<number, string[]>();
-      relations.forEach((relation) => {
-        const categoryName = categoryById.get(relation.category_id);
-        if (!categoryName) return;
-        namesByPortrait.set(relation.portrait_id, [...(namesByPortrait.get(relation.portrait_id) ?? []), categoryName]);
-      });
-      setCategoryNames(availableCategories.map((item) => item.name));
-      setTemplates(portraits.map((record) => toPhotoTemplate(record, namesByPortrait.get(record.id) ?? [])));
-    }
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
-    void loadGalleryData();
-    return subscribeToGalleryDataChanges(() => void loadGalleryData());
-  }, [loadGalleryData]);
+    let active = true;
+    fetch('/gallery.json')
+      .then((response) => {
+        if (!response.ok) throw new Error(`Gallery request failed: ${response.status}`);
+        return response.json() as Promise<StaticGalleryData>;
+      })
+      .then((data) => {
+        if (!active) return;
+        setCategoryNames(data.categories);
+        setTemplates(data.items.map(toStaticPhotoTemplate));
+      })
+      .catch(() => {
+        if (!active) return;
+        setTemplates([]);
+        setCategoryNames([]);
+        setLoadError('写真数据加载失败，请稍后重试');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   return (
     <Routes>
       <Route path="/" element={<GalleryPage templates={templates} categoryNames={categoryNames} loading={loading} loadError={loadError} />} />
       <Route path="/style/:id" element={<DetailPage templates={templates} loading={loading} />} />
-      <Route path="/admin" element={<AdminPage />} />
+      <Route path="/admin" element={<Suspense fallback={<main className="empty-state"><span>正在加载管理后台…</span></main>}><AdminPage /></Suspense>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -241,12 +223,11 @@ function LoopingGallery({ items, cacheKey }: { items: PhotoTemplate[]; cacheKey:
 }
 
 function TemplateCard({ item, index }: { item: PhotoTemplate; index: number }) {
-  const thumbnailUrl = getGalleryThumbnailUrl(item.images[0]);
   return (
     <Link to={`/style/${item.id}`} className={`template-card card-${index % 4}`} aria-label={`${item.number} ${item.name}`}>
       <div className="card-image">
         <img
-          src={thumbnailUrl}
+          src={item.thumbnail}
           alt={`${item.name}效果图`}
           width="480"
           height="640"

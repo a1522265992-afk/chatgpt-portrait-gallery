@@ -26,24 +26,39 @@ export type PhotoTemplate = {
   categories: string[];
   tags: string[];
   hot: boolean;
+  thumbnail: string;
   images: string[];
   description: string;
 };
 
-export function getGalleryThumbnailUrl(sourceUrl: string) {
-  try {
-    const url = new URL(sourceUrl);
-    const publicStoragePath = '/storage/v1/object/public/';
-    if (!url.hostname.endsWith('.supabase.co') || !url.pathname.includes(publicStoragePath)) return sourceUrl;
+export type StaticGalleryItem = {
+  id: string;
+  name: string;
+  categories: string[];
+  thumbnail: string;
+  originalImage: string;
+};
 
-    url.pathname = url.pathname.replace(publicStoragePath, '/storage/v1/render/image/public/');
-    url.searchParams.set('width', '600');
-    url.searchParams.set('quality', '78');
-    url.searchParams.set('resize', 'contain');
-    return url.toString();
-  } catch {
-    return sourceUrl;
-  }
+export type StaticGalleryData = {
+  generatedAt: string;
+  categories: string[];
+  items: StaticGalleryItem[];
+};
+
+export function toStaticPhotoTemplate(item: StaticGalleryItem): PhotoTemplate {
+  const primaryCategory = item.categories[0] ?? '未分类';
+  return {
+    id: item.id,
+    number: `#${item.id}`,
+    name: item.name,
+    category: primaryCategory,
+    categories: item.categories,
+    tags: item.categories,
+    hot: item.categories.some((name) => name.includes('热门')),
+    thumbnail: item.thumbnail,
+    images: [item.originalImage],
+    description: `以${item.name}为主题的${primaryCategory}写真效果。`,
+  };
 }
 
 export function toPhotoTemplate(record: Omit<PortraitRecord, 'prompt'>, categoryNames: string[]): PhotoTemplate {
@@ -57,6 +72,7 @@ export function toPhotoTemplate(record: Omit<PortraitRecord, 'prompt'>, category
     categories: categoryNames,
     tags: categoryNames,
     hot: categoryNames.some((name) => name.includes('热门')),
+    thumbnail: record.image_url,
     images: [record.image_url],
     description: `以${record.name}为主题的${primaryCategory}写真效果。`,
   };

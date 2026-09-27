@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit && eslint .",
-    "generate:data": "node scripts/generate-data.mjs"
+    "generate:data": "node scripts/generate-data.mjs",
+    "sync-gallery": "node scripts/sync-gallery.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
