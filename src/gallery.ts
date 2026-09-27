@@ -28,10 +28,9 @@ export type PhotoTemplate = {
   hot: boolean;
   images: string[];
   description: string;
-  prompt: string;
 };
 
-export function toPhotoTemplate(record: PortraitRecord, categoryNames: string[]): PhotoTemplate {
+export function toPhotoTemplate(record: Omit<PortraitRecord, 'prompt'>, categoryNames: string[]): PhotoTemplate {
   const id = String(record.id).padStart(3, '0');
   const primaryCategory = categoryNames[0] ?? '未分类';
   return {
@@ -44,6 +43,5 @@ export function toPhotoTemplate(record: PortraitRecord, categoryNames: string[])
     hot: categoryNames.some((name) => name.includes('热门')),
     images: [record.image_url],
     description: `以${record.name}为主题的${primaryCategory}写真效果。`,
-    prompt: record.prompt,
   };
 }

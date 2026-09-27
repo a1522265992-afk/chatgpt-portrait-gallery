@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Flame, Search, Sparkles, X } from 'lucide-react';
-import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { toPhotoTemplate, type CategoryRecord, type PhotoTemplate, type PortraitCategoryRecord, type PortraitRecord } from './gallery';
 import { AdminPage } from './AdminPage';
 import { subscribeToGalleryDataChanges } from './gallerySync';
@@ -23,7 +23,7 @@ function App() {
     setLoading(true);
     setLoadError('');
     const [portraitResult, categoryResult, relationResult] = await Promise.all([
-      supabase.from('portraits').select('id,name,prompt,image_url,created_at').order('id', { ascending: true }),
+      supabase.from('portraits').select('id,name,image_url,created_at').order('id', { ascending: true }),
       supabase.from('categories').select('id,name,created_at').order('id', { ascending: true }),
       supabase.from('portrait_categories').select('portrait_id,category_id,created_at'),
     ]);
@@ -130,56 +130,75 @@ function TemplateCard({ item, index }: { item: PhotoTemplate; index: number }) {
     <Link to={`/style/${item.id}`} className={`template-card card-${index % 4}`} aria-label={`${item.number} ${item.name}`}>
       <div className="card-image">
         <img src={item.images[0]} alt={`${item.name}效果图`} loading={index > 3 ? 'lazy' : 'eager'} />
-        <span className="card-number">{item.number}</span>
         {item.hot && <span className="hot-badge"><Flame size={12} fill="currentColor" /> HOT</span>}
       </div>
-      <div className="card-body"><h2>{item.name}</h2><div className="tag-row">{item.tags.slice(0, 2).map((tag) => <span key={tag}>#{tag}</span>)}</div></div>
+      <div className="card-body">
+        <h2>{item.name}</h2>
+        <div className="card-meta"><span>{item.number}</span><span>{item.category}</span></div>
+      </div>
     </Link>
   );
 }
 
 function DetailPage({ templates, loading }: { templates: PhotoTemplate[]; loading: boolean }) {
   const { id } = useParams();
+  const navigate = useNavigate();
   const item = templates.find((template) => template.id === id);
-  const [slide, setSlide] = useState(0);
-  const [copied, setCopied] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const [numberCopied, setNumberCopied] = useState(false);
-  const touchStart = useRef<number | null>(null);
+  const [loadedImageId, setLoadedImageId] = useState<string | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    setSheetOpen(false);
+    setQrOpen(false);
     if (item) document.title = `${item.number} ${item.name}｜ChatGPT 写真馆`;
   }, [item]);
 
   if (loading) return <main className="detail-page"><section className="empty-state"><span>正在加载写真…</span></section></main>;
   if (!item) return <Navigate to="/" replace />;
 
-  const go = (direction: number) => setSlide((current) => (current + direction + item.images.length) % item.images.length);
-  const copy = async (text: string, kind: 'prompt' | 'number') => {
+  const switchTemplate = (direction: number) => {
+    const currentIndex = templates.findIndex((template) => template.id === item.id);
+    const targetIndex = (currentIndex + direction + templates.length) % templates.length;
+    navigate(`/style/${templates[targetIndex].id}`);
+  };
+  const copyNumber = async (text: string) => {
     await navigator.clipboard.writeText(text);
-    if (kind === 'prompt') { setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
-    else { setNumberCopied(true); window.setTimeout(() => setNumberCopied(false), 1800); }
+    setNumberCopied(true);
+    window.setTimeout(() => setNumberCopied(false), 1800);
+  };
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStart.current) return;
+    const deltaX = event.changedTouches[0].clientX - touchStart.current.x;
+    const deltaY = event.changedTouches[0].clientY - touchStart.current.y;
+    touchStart.current = null;
+    if (Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return;
+    switchTemplate(deltaX < 0 ? 1 : -1);
   };
 
   return (
     <main className="detail-page">
-      <div className="hero-slider" onTouchStart={(event) => { touchStart.current = event.touches[0].clientX; }} onTouchEnd={(event) => { if (touchStart.current === null) return; const delta = event.changedTouches[0].clientX - touchStart.current; if (Math.abs(delta) > 45) go(delta > 0 ? -1 : 1); touchStart.current = null; }}>
-        <img src={item.images[slide]} alt={`${item.name}效果图 ${slide + 1}`} />
+      <div
+        className={loadedImageId === item.id ? 'hero-slider image-ready' : 'hero-slider'}
+        onTouchStart={(event) => { touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }; }}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={() => { touchStart.current = null; }}
+      >
+        <div className="image-skeleton" aria-hidden="true" />
+        <img key={item.id} src={item.images[0]} alt={`${item.name}效果图`} onLoad={() => setLoadedImageId(item.id)} />
         <Link to="/" className="round-control back" aria-label="返回首页"><ArrowLeft size={20} /></Link>
         {item.hot && <span className="detail-hot"><Flame size={13} fill="currentColor" /> 热门模板</span>}
-        <button type="button" className="round-control previous" onClick={() => go(-1)} aria-label="上一张"><ChevronLeft size={21} /></button>
-        <button type="button" className="round-control next" onClick={() => go(1)} aria-label="下一张"><ChevronRight size={21} /></button>
-        <div className="slide-dots" aria-label={`第 ${slide + 1} 张，共 ${item.images.length} 张`}>{item.images.map((_, index) => <button key={index} type="button" className={index === slide ? 'active' : ''} onClick={() => setSlide(index)} aria-label={`查看第 ${index + 1} 张`} />)}</div>
+        <button type="button" className="round-control previous" onClick={() => switchTemplate(-1)} aria-label="上一个写真模板"><ChevronLeft size={23} /></button>
+        <button type="button" className="round-control next" onClick={() => switchTemplate(1)} aria-label="下一个写真模板"><ChevronRight size={23} /></button>
+        <div className="swipe-hint" aria-hidden="true">左右滑动切换模板</div>
       </div>
       <article className="detail-content">
-        <div className="detail-heading"><p>{item.number}</p><h1>{item.name}</h1><span className="category-label">{item.category}</span></div>
-        <div className="detail-tags">{item.tags.map((tag) => <span key={tag}>#{tag}</span>)}</div>
-        <section className="info-block"><p className="section-index">01 / EFFECT</p><h2>效果说明</h2><p className="description">{item.description}</p></section>
-        <section className="info-block prompt-block">
-          <div className="section-title-row"><div><p className="section-index">02 / PROMPT</p><h2>完整提示词</h2></div><button type="button" className="copy-button" onClick={() => copy(item.prompt, 'prompt')}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : '复制提示词'}</button></div>
-          <div className="prompt-card">{item.prompt}</div>
-        </section>
+        <div className="detail-heading"><p>{item.number}</p><h1>{item.name}</h1></div>
+        <div className="detail-tags" aria-label="写真分类">{item.categories.length ? item.categories.map((tag) => <span key={tag}>{tag}</span>) : <span>未分类</span>}</div>
+        <section className="info-block"><p className="section-index">ABOUT THIS LOOK</p><h2>效果说明</h2><p className="description">{item.description}</p></section>
       </article>
       <div className="sticky-cta"><button type="button" onClick={() => setSheetOpen(true)}>我要生成 <span>↗</span></button></div>
       {sheetOpen && (
@@ -188,9 +207,21 @@ function DetailPage({ templates, loading }: { templates: PhotoTemplate[]; loadin
             <div className="sheet-handle" /><button type="button" className="sheet-close" onClick={() => setSheetOpen(false)} aria-label="关闭"><X size={20} /></button>
             <p className="sheet-kicker">WECHAT · CONTACT</p><h2 id="lead-title">喜欢这个效果？</h2><p className="sheet-copy">加微信发原图和模板编号即可。</p>
             <div className="selected-template"><img src={item.images[0]} alt="当前模板缩略图" /><div><span>当前模板</span><strong>{item.number} {item.name}</strong></div></div>
-            <div className="qr-wrap"><img src="/wechat-qr.png" alt="微信二维码" /><span>长按识别二维码添加微信</span></div>
-            <button type="button" className="copy-number-button" onClick={() => copy(`${item.number} ${item.name}`, 'number')}>{numberCopied ? <Check size={17} /> : <Copy size={17} />}{numberCopied ? '模板编号已复制' : '复制模板编号'}</button>
+            <div className="qr-wrap">
+              <img src="/wechat-qr.png" alt="微信二维码，点击放大" role="button" tabIndex={0} onClick={() => setQrOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setQrOpen(true); }} />
+              <span>点击放大 · 长按二维码保存 / 识别添加微信</span>
+            </div>
+            <button type="button" className="copy-number-button" onClick={() => copyNumber(`${item.number} ${item.name}`)}>{numberCopied ? <Check size={17} /> : <Copy size={17} />}{numberCopied ? '模板编号已复制' : '复制模板编号'}</button>
           </section>
+        </div>
+      )}
+      {qrOpen && (
+        <div className="qr-preview" role="dialog" aria-modal="true" aria-label="微信二维码大图" onClick={() => setQrOpen(false)}>
+          <button type="button" className="qr-preview-close" onClick={() => setQrOpen(false)} aria-label="关闭二维码大图"><X size={22} /></button>
+          <div className="qr-preview-card" onClick={(event) => event.stopPropagation()}>
+            <img src="/wechat-qr.png" alt="微信二维码大图" />
+            <p>长按二维码保存 / 识别添加微信</p>
+          </div>
         </div>
       )}
     </main>
