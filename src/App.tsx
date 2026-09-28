@@ -5,36 +5,12 @@ import { toStaticPhotoTemplate, type PhotoTemplate, type StaticGalleryData } fro
 
 const AdminPage = lazy(() => import('./AdminPage').then((module) => ({ default: module.AdminPage })));
 
-type GalleryFeedCache = {
+type GalleryScrollCache = {
   key: string;
-  roundIds: string[][];
   scrollY: number;
 };
 
-let galleryFeedCache: GalleryFeedCache = { key: '', roundIds: [], scrollY: 0 };
-
-function shuffleRound(items: PhotoTemplate[], previousRound: PhotoTemplate[]) {
-  const shuffled = [...items];
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-  }
-
-  if (shuffled.length > 1 && shuffled.every((item, index) => item.id === previousRound[index]?.id)) {
-    shuffled.push(shuffled.shift()!);
-  }
-  if (shuffled.length > 1 && shuffled[0].id === previousRound.at(-1)?.id) {
-    [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
-  }
-  return shuffled;
-}
-
-function getInitialRounds(items: PhotoTemplate[], cacheKey: string) {
-  if (galleryFeedCache.key !== cacheKey || !galleryFeedCache.roundIds.length) return [items];
-  const itemById = new Map(items.map((item) => [item.id, item]));
-  const restored = galleryFeedCache.roundIds.map((roundIds) => roundIds.map((id) => itemById.get(id)).filter((item): item is PhotoTemplate => Boolean(item)));
-  return restored.every((round) => round.length === items.length) ? restored : [items];
-}
+let galleryScrollCache: GalleryScrollCache = { key: '', scrollY: 0 };
 
 function App() {
   const [templates, setTemplates] = useState<PhotoTemplate[]>([]);
@@ -94,7 +70,7 @@ function GalleryPage({ templates, categoryNames, loading, loadError }: { templat
     const haystack = `${item.number} ${item.name} ${item.categories.join(' ')} ${item.tags.join(' ')}`.toLowerCase();
     return inCategory && (!deferredQuery || haystack.includes(deferredQuery));
   }), [category, deferredQuery, templates]);
-  const feedKey = useMemo(() => `${category}\u0001${deferredQuery}\u0001${filtered.map((item) => item.id).join(',')}`, [category, deferredQuery, filtered]);
+  const listKey = useMemo(() => `${category}\u0001${deferredQuery}\u0001${filtered.map((item) => item.id).join(',')}`, [category, deferredQuery, filtered]);
 
   return (
     <main className="gallery-page">
@@ -128,7 +104,7 @@ function GalleryPage({ templates, categoryNames, loading, loadError }: { templat
       ) : loadError ? (
         <section className="empty-state"><span>{loadError}</span></section>
       ) : filtered.length ? (
-        <LoopingGallery key={feedKey} items={filtered} cacheKey={feedKey} />
+        <GalleryList key={listKey} items={filtered} cacheKey={listKey} />
       ) : (
         <section className="empty-state"><span>没有找到匹配的风格</span><button type="button" onClick={() => { setQuery(''); setCategory('全部'); }}>看看全部模板</button></section>
       )}
@@ -136,19 +112,15 @@ function GalleryPage({ templates, categoryNames, loading, loadError }: { templat
   );
 }
 
-function LoopingGallery({ items, cacheKey }: { items: PhotoTemplate[]; cacheKey: string }) {
-  const [rounds, setRounds] = useState<PhotoTemplate[][]>(() => getInitialRounds(items, cacheKey));
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const appendLock = useRef(false);
+function GalleryList({ items, cacheKey }: { items: PhotoTemplate[]; cacheKey: string }) {
   const navigatingToDetail = useRef(false);
-  const canLoop = items.length >= 4;
 
   useEffect(() => {
-    galleryFeedCache = { key: cacheKey, roundIds: rounds.map((round) => round.map((item) => item.id)), scrollY: galleryFeedCache.key === cacheKey ? galleryFeedCache.scrollY : 0 };
-  }, [cacheKey, rounds]);
+    if (galleryScrollCache.key !== cacheKey) galleryScrollCache = { key: cacheKey, scrollY: 0 };
+  }, [cacheKey]);
 
   useEffect(() => {
-    let savedScroll = galleryFeedCache.key === cacheKey ? galleryFeedCache.scrollY : 0;
+    let savedScroll = galleryScrollCache.key === cacheKey ? galleryScrollCache.scrollY : 0;
     let storedScroll: { key?: string; scrollY?: number } | null = null;
     try {
       storedScroll = JSON.parse(window.sessionStorage.getItem('portrait-gallery-scroll') ?? 'null') as { key?: string; scrollY?: number } | null;
@@ -173,51 +145,27 @@ function LoopingGallery({ items, cacheKey }: { items: PhotoTemplate[]; cacheKey:
   }, [cacheKey]);
 
   useEffect(() => () => {
-    if (galleryFeedCache.key !== cacheKey || navigatingToDetail.current) return;
+    if (galleryScrollCache.key !== cacheKey || navigatingToDetail.current) return;
     const currentScroll = window.scrollY;
-    if (currentScroll > 0 || galleryFeedCache.scrollY === 0) galleryFeedCache.scrollY = currentScroll;
+    if (currentScroll > 0 || galleryScrollCache.scrollY === 0) galleryScrollCache.scrollY = currentScroll;
   }, [cacheKey]);
 
-  useEffect(() => {
-    appendLock.current = false;
-  }, [rounds.length]);
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!canLoop || !sentinel) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting || appendLock.current) return;
-      appendLock.current = true;
-      observer.disconnect();
-      setRounds((current) => [...current, shuffleRound(items, current.at(-1) ?? items)]);
-    }, { rootMargin: '0px 0px 900px 0px' });
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [canLoop, items, rounds.length]);
-
   return (
-    <div className="loop-feed" onClickCapture={(event) => {
-      if ((event.target as HTMLElement).closest('.template-card') && galleryFeedCache.key === cacheKey) {
+    <div className="gallery-list" onClickCapture={(event) => {
+      if ((event.target as HTMLElement).closest('.template-card') && galleryScrollCache.key === cacheKey) {
         navigatingToDetail.current = true;
-        galleryFeedCache.scrollY = window.scrollY;
+        galleryScrollCache.scrollY = window.scrollY;
         window.sessionStorage.setItem('portrait-gallery-scroll', JSON.stringify({ key: cacheKey, scrollY: window.scrollY }));
       }
     }}>
-      {rounds.map((round, roundIndex) => (
-        <div className="gallery-round" data-round={roundIndex + 1} key={`${cacheKey}-round-${roundIndex}`}>
-          <section className="masonry" aria-label={`写真模板第 ${roundIndex + 1} 轮`}>
-            {round.map((item, index) => <TemplateCard key={`${roundIndex}-${item.id}`} item={item} index={(roundIndex * items.length) + index} />)}
-          </section>
-          {canLoop && (
-            <section className="gallery-ending" aria-label={`第 ${roundIndex + 1} 轮写真结束`}>
-              <p className="gallery-ending-label">Members Library</p>
-              <p className="gallery-ending-title">这里展示的，只是一小部分。</p>
-              <p className="gallery-ending-copy">更多写真模板，每周持续更新。</p>
-            </section>
-          )}
-        </div>
-      ))}
-      {canLoop && <div className="loop-sentinel" ref={sentinelRef} aria-hidden="true" />}
+      <section className="masonry" aria-label="写真模板">
+        {items.map((item, index) => <TemplateCard key={item.id} item={item} index={index} />)}
+      </section>
+      <section className="gallery-ending" aria-label="写真列表结束">
+        <p className="gallery-ending-label">MEMBERS LIBRARY</p>
+        <p className="gallery-ending-title">这里展示的，只是一小部分。</p>
+        <p className="gallery-ending-copy">更多写真模板，每周持续更新。</p>
+      </section>
     </div>
   );
 }
