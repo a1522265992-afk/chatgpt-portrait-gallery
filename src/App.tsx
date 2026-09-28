@@ -264,8 +264,12 @@ function DetailPage({ templates, loading }: { templates: PhotoTemplate[]; loadin
               <span>点击放大 · 长按二维码保存 / 识别添加微信</span>
             </div>
             <div className="price-info" aria-label="价格信息">
-              <p className="price-line"><span><strong>¥8.88</strong> / 10张</span><span className="price-separator">·</span><span><strong>¥38</strong> / 月无限量</span></p>
-              <p className="price-note">每张照片支持 5 次修改</p>
+              <p className="price-line">
+                <span className="price-option"><strong>¥8.8</strong><span> / 10张</span></span>
+                <span className="price-option"><strong>¥19.9</strong><span> / 30张</span></span>
+                <span className="price-option"><strong>¥38</strong><span> / 60张 · 月卡</span></span>
+              </p>
+              <p className="price-note">每张照片支持 3次免费修改</p>
             </div>
             <button type="button" className="copy-number-button" onClick={() => copyNumber(`${item.number} ${item.name}`)}>{numberCopied ? <Check size={17} /> : <Copy size={17} />}{numberCopied ? '模板编号已复制' : '复制模板编号'}</button>
           </section>
